@@ -2,7 +2,7 @@
   <div class="product-detail-page">
     <header class="header">
       <div class="header-content">
-        <h1 class="logo" @click="$router.push('/')">GoodDog</h1>
+        <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
         <div class="user-area">
           <template v-if="userStore.isLoggedIn">
             <span class="username">{{ userStore.userInfo?.username }}</span>
@@ -44,6 +44,31 @@
             <span class="price-value">价格待议</span>
           </div>
 
+          <div class="product-tags" v-if="product.tags && product.tags.length > 0">
+            <h3>商品标签</h3>
+            <div class="tags-container">
+              <el-tag
+                v-for="tag in product.tags"
+                :key="tag.id"
+                :color="tag.color"
+                style="color: white; margin: 4px;"
+                :closable="userStore.userInfo?.id === product.user_id"
+                @close="handleRemoveTag(tag)"
+              >
+                {{ tag.name }}
+                <el-tag v-if="tag.is_ai_generated" size="small" type="info" style="margin-left: 4px; font-size: 10px;">AI</el-tag>
+              </el-tag>
+              <el-button
+                v-if="userStore.userInfo?.id === product.user_id"
+                size="small"
+                @click="showAddTagDialog = true"
+                style="margin: 4px;"
+              >
+                + 添加标签
+              </el-button>
+            </div>
+          </div>
+
           <div class="product-description">
             <h3>商品描述</h3>
             <p>{{ product.description }}</p>
@@ -67,6 +92,32 @@
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="showAddTagDialog" title="添加标签" width="500px">
+      <el-input
+        v-model="newTagName"
+        placeholder="输入标签名称，按回车添加"
+        @keyup.enter="handleAddTag"
+      >
+        <template #append>
+          <el-button @click="handleAddTag">添加</el-button>
+        </template>
+      </el-input>
+      <div class="existing-tags" v-if="existingTags.length > 0">
+        <p>已有标签（点击选择）：</p>
+        <div class="tags-container">
+          <el-tag
+            v-for="tag in existingTags"
+            :key="tag.id"
+            :color="tag.color"
+            style="color: white; margin: 4px; cursor: pointer;"
+            @click="handleSelectExistingTag(tag)"
+          >
+            {{ tag.name }}
+          </el-tag>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -75,7 +126,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { productAPI, transactionAPI, messageAPI } from '@/api/modules'
+import { productAPI, transactionAPI, messageAPI, tagAPI } from '@/api/modules'
 
 const router = useRouter()
 const route = useRoute()
@@ -83,6 +134,9 @@ const userStore = useUserStore()
 
 const product = ref(null)
 const loading = ref(false)
+const showAddTagDialog = ref(false)
+const newTagName = ref('')
+const existingTags = ref([])
 
 async function fetchProduct() {
   loading.value = true
@@ -93,6 +147,52 @@ async function fetchProduct() {
     console.error(e)
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchExistingTags() {
+  try {
+    const res = await tagAPI.getList({ per_page: 50 })
+    existingTags.value = res.data.tags || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function handleAddTag() {
+  if (!newTagName.value.trim()) {
+    ElMessage.warning('请输入标签名称')
+    return
+  }
+
+  try {
+    await tagAPI.addProductTag(product.value.id, { tag_name: newTagName.value.trim() })
+    ElMessage.success('标签添加成功')
+    newTagName.value = ''
+    await fetchProduct()
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function handleSelectExistingTag(tag) {
+  try {
+    await tagAPI.addProductTag(product.value.id, { tag_id: tag.id })
+    ElMessage.success('标签添加成功')
+    showAddTagDialog.value = false
+    await fetchProduct()
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function handleRemoveTag(tag) {
+  try {
+    await tagAPI.removeProductTag(product.value.id, tag.id)
+    ElMessage.success('标签已移除')
+    await fetchProduct()
+  } catch (e) {
+    console.error(e)
   }
 }
 
@@ -140,6 +240,7 @@ async function handleDelete() {
 
 onMounted(() => {
   fetchProduct()
+  fetchExistingTags()
 })
 </script>
 
@@ -243,6 +344,21 @@ onMounted(() => {
   color: #f56c6c;
 }
 
+.product-tags {
+  margin-bottom: 24px;
+}
+
+.product-tags h3 {
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .product-description {
   margin-bottom: 24px;
 }
@@ -268,5 +384,14 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   margin-top: auto;
+}
+
+.existing-tags {
+  margin-top: 16px;
+}
+
+.existing-tags p {
+  margin-bottom: 8px;
+  color: #666;
 }
 </style>

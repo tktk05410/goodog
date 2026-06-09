@@ -8,10 +8,9 @@ class TextClassifier:
     SELL_KEYWORDS = ['出售', '卖', '转让', 'sell', 'sell', '转让', '闲置', '二手', '全新', '低价']
     BUY_KEYWORDS = ['求购', '买', '需要', 'buy', 'want', '收购', '想要', '急求']
 
-    def __init__(self, app_id=None, api_key=None, api_secret=None):
-        self.app_id = app_id
-        self.api_key = api_key
-        self.api_secret = api_secret
+    def __init__(self, api_key=None, base_url=None):
+        self.api_key = "sk-e5c99531661b4d4d855010bdff09c3e5"
+        self.base_url = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
     def classify(self, text):
         text_lower = text.lower()
@@ -38,38 +37,142 @@ class TextClassifier:
                 'scores': {'sell': sell_score, 'buy': buy_score}
             }
 
-    def classify_with_xunfei(self, text):
-        if not self.app_id or not self.api_key:
+    def classify_with_qwen(self, text):
+        if not self.api_key:
             return self.classify(text)
 
         try:
-            url = "https://api.xfyun.cn/v1/service/v1/aiui"
+            url = f"{self.base_url}/chat/completions"
             headers = {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {self.api_key}'
             }
             data = {
-                'app_id': self.app_id,
-                'text': text,
-                'scene': 'second_hand_market'
+                'model': 'qwen3.7-plus',
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': '你是一个二手市场文本分类器。请分析用户输入的文本，判断其意图是"出售"(sell)还是"求购"(buy)。只返回JSON格式：{"type": "sell"或"buy", "confidence": 0-1之间的数字}'
+                    },
+                    {
+                        'role': 'user',
+                        'content': text
+                    }
+                ],
+                'temperature': 0.1,
+                'max_tokens': 100
             }
 
-            response = requests.post(url, json=data, headers=headers, timeout=5)
+            response = requests.post(url, json=data, headers=headers, timeout=10)
             result = response.json()
 
-            if result.get('code') == '000000':
-                intent = result.get('data', {}).get('intent', {})
-                slot = intent.get('slots', [])
-                if slot:
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content'].strip()
+                import json
+                parsed = json.loads(content)
+                return {
+                    'type': parsed.get('type', 'sell'),
+                    'confidence': parsed.get('confidence', 0.9),
+                    'source': 'qwen'
+                }
+
+        except Exception as e:
+            print(f'Qwen API error: {e}')
+
+        return self.classify(text)
+
+    def generate_tags_with_qwen(self, title, description):
+        if not self.api_key:
+            return self.generate_tags_by_keywords(title, description)
+
+        try:
+            url = f"{self.base_url}/chat/completions"
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {self.api_key}'
+            }
+            data = {
+                'model': 'qwen3.7-plus',
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': '''你是一个二手市场商品标签生成器。请根据商品标题和描述，生成3-8个合适的标签。
+标签要求：
+1. 每个标签1-4个汉字或英文单词
+2. 标签应反映商品类别、品牌、成色、用途等特征
+3. 只返回JSON数组格式，例如：["电子产品", "九成新", "手机", "苹果"]
+4. 不要返回任何其他内容
+5. 禁止生成"二手商品"、"二手"、"闲置"、"闲置物品"等标签，因为平台本身就是二手交易平台，这类标签没有区分意义'''
+                    },
+                    {
+                        'role': 'user',
+                        'content': f'标题：{title}\n描述：{description}'
+                    }
+                ],
+                'temperature': 0.3,
+                'max_tokens': 200
+            }
+
+            response = requests.post(url, json=data, headers=headers, timeout=10)
+            result = response.json()
+
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content'].strip()
+                import json
+                tags = json.loads(content)
+                if isinstance(tags, list):
                     return {
-                        'type': slot[0].get('type', 'sell'),
-                        'confidence': 0.9,
-                        'source': 'xunfei'
+                        'tags': tags[:8],
+                        'source': 'qwen'
                     }
 
         except Exception as e:
-            print(f'Xunfei API error: {e}')
+            print(f'Qwen tag generation error: {e}')
 
-        return self.classify(text)
+        return self.generate_tags_by_keywords(title, description)
+
+    def generate_tags_by_keywords(self, title, description):
+        text = f'{title} {description}'.lower()
+        tags = []
+
+        category_keywords = {
+            '电子产品': ['手机', '电脑', '平板', '耳机', '相机', '键盘', '鼠标', '显示器', '笔记本', 'iphone', 'ipad', 'macbook'],
+            '图书': ['书', '教材', '小说', '杂志', 'book'],
+            '服装': ['衣服', '裤子', '鞋子', '外套', '裙子', 't恤', '衬衫', 'clothes', 'shoes'],
+            '家具': ['桌子', '椅子', '床', '柜子', '沙发', '书架', 'desk', 'chair'],
+            '运动': ['篮球', '足球', '羽毛球', '跑步', '健身', '运动', 'sports'],
+            '乐器': ['吉他', '钢琴', '小提琴', 'guitar', 'piano'],
+            '游戏': ['游戏', 'switch', 'ps5', 'xbox', 'game'],
+            '化妆品': ['口红', '粉底', '面膜', '护肤', 'cosmetic'],
+        }
+
+        condition_keywords = {
+            '全新': ['全新', '未拆封', 'new'],
+            '九成新': ['九成新', '几乎全新', '9成新'],
+            '八成新': ['八成新', '8成新', '轻微使用'],
+            '七成新': ['七成新', '7成新', '有使用痕迹'],
+            '二手': ['二手', '闲置', 'used'],
+        }
+
+        for category, keywords in category_keywords.items():
+            if any(kw in text for kw in keywords):
+                tags.append(category)
+
+        for condition, keywords in condition_keywords.items():
+            if any(kw in text for kw in keywords):
+                tags.append(condition)
+                break
+
+        brand_keywords = ['苹果', '华为', '小米', '三星', '索尼', 'nike', 'adidas', 'apple', 'huawei']
+        for brand in brand_keywords:
+            if brand in text:
+                tags.append(brand)
+                break
+
+        return {
+            'tags': tags[:8] if tags else ['闲置物品'],
+            'source': 'keyword'
+        }
 
 class ContentFilter:
     SENSITIVE_WORDS = [

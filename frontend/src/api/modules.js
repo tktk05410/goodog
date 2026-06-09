@@ -75,3 +75,15 @@ export const logAPI = {
   getDistinctActions: () => api.get('/logs/actions'),
   getUserLogs: (userId, params) => api.get(`/logs/user/${userId}`, { params })
 }
+
+export const tagAPI = {
+  getList: (params) => api.get('/tags/', { params }),
+  getById: (id) => api.get(`/tags/${id}`),
+  create: (data) => api.post('/tags/', data),
+  update: (id, data) => api.put(`/tags/${id}`, data),
+  delete: (id) => api.delete(`/tags/${id}`),
+  getProductTags: (productId) => api.get(`/tags/products/${productId}`),
+  addProductTag: (productId, data) => api.post(`/tags/products/${productId}`, data),
+  removeProductTag: (productId, tagId) => api.delete(`/tags/products/${productId}/tags/${tagId}`),
+  updateProductTags: (productId, data) => api.put(`/tags/products/${productId}/tags`, data)
+}

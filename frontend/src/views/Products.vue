@@ -2,7 +2,7 @@
   <div class="products-page">
     <header class="header">
       <div class="header-content">
-        <h1 class="logo" @click="$router.push('/')">GoodDog</h1>
+        <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
         <div class="user-area">
           <template v-if="userStore.isLoggedIn">
             <span class="username">{{ userStore.userInfo?.username }}</span>
@@ -54,6 +54,17 @@
             </div>
             <div class="product-info">
               <h3 class="product-title">{{ product.title }}</h3>
+              <div class="product-tags" v-if="product.tags && product.tags.length > 0">
+                <el-tag
+                  v-for="tag in product.tags.slice(0, 3)"
+                  :key="tag.id"
+                  :color="tag.color"
+                  size="small"
+                  style="color: white; margin-right: 4px;"
+                >
+                  {{ tag.name }}
+                </el-tag>
+              </div>
               <p class="product-desc">{{ product.description }}</p>
               <div class="product-meta">
                 <span class="product-price" v-if="product.price">¥{{ product.price }}</span>
@@ -228,6 +239,10 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.product-tags {
+  margin-bottom: 8px;
 }
 
 .product-desc {

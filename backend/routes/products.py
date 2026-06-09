@@ -1,10 +1,68 @@
 from flask import Blueprint, request, jsonify, g
 from sqlalchemy import or_
 
-from models import db, Product
+from models import db, Product, Tag, ProductTag
 from app import log_action, token_required, allowed_file, save_uploaded_file
 
 bp = Blueprint('products', __name__)
+
+def auto_generate_tags(product):
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    from ai_services.text_classifier import TextClassifier
+    from ai_services.image_processor import ImageProcessor
+
+    text_tags = []
+    image_tags = []
+
+    try:
+        classifier = TextClassifier()
+        text_result = classifier.generate_tags_with_qwen(product.title, product.description)
+        text_tags = text_result.get('tags', [])
+    except Exception as e:
+        print(f'Text tag generation error: {e}')
+
+    if product.image_path:
+        try:
+            image_path = os.path.join('d:\\End-of-term Professional Comprehensive Practice\\project\\goodog\\uploads', product.image_path)
+            if os.path.exists(image_path):
+                classifier = TextClassifier()
+                image_result = ImageProcessor.recognize_with_qwen(
+                    image_path,
+                    classifier.api_key,
+                    classifier.base_url
+                )
+                image_tags = image_result.get('tags', [])
+        except Exception as e:
+            print(f'Image tag generation error: {e}')
+
+    all_tags = list(set(text_tags + image_tags))[:8]
+
+    for tag_name in all_tags:
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if not tag:
+            tag = Tag(name=tag_name, color='#409eff', is_ai_generated=True)
+            db.session.add(tag)
+            db.session.flush()
+
+        existing = ProductTag.query.filter_by(product_id=product.id, tag_id=tag.id).first()
+        if not existing:
+            product_tag = ProductTag(
+                product_id=product.id,
+                tag_id=tag.id,
+                is_ai_generated=True
+            )
+            db.session.add(product_tag)
+
+    log_action('AI_AUTO_TAG', {
+        'product_id': product.id,
+        'tags': all_tags,
+        'text_tags': text_tags,
+        'image_tags': image_tags
+    })
+
+    return all_tags
 
 @bp.route('/', methods=['GET'])
 def get_products():
@@ -23,9 +81,16 @@ def get_products():
         query = query.filter(Product.status == status_filter)
 
     if keyword:
+        product_ids_with_tag = db.session.query(ProductTag.product_id).join(
+            Tag, ProductTag.tag_id == Tag.id
+        ).filter(
+            Tag.name.like(f'%{keyword}%')
+        ).subquery()
+
         query = query.filter(or_(
             Product.title.like(f'%{keyword}%'),
-            Product.description.like(f'%{keyword}%')
+            Product.description.like(f'%{keyword}%'),
+            Product.id.in_(product_ids_with_tag)
         ))
 
     pagination = query.order_by(Product.create_time.desc()).paginate(
@@ -76,6 +141,9 @@ def create_product():
     )
 
     db.session.add(product)
+    db.session.commit()
+
+    auto_generate_tags(product)
     db.session.commit()
 
     log_action('PRODUCT_CREATE', {

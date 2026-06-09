@@ -83,3 +83,27 @@ CREATE TABLE IF NOT EXISTS `system_log` (
     INDEX `idx_action` (`action`),
     INDEX `idx_timestamp` (`timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 标签表
+CREATE TABLE IF NOT EXISTS `tag` (
+    `id` INT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(50) NOT NULL UNIQUE,
+    `color` VARCHAR(20) DEFAULT '#409eff',
+    `is_ai_generated` BOOLEAN DEFAULT FALSE,
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 商品标签关联表
+CREATE TABLE IF NOT EXISTS `product_tag` (
+    `id` INT PRIMARY KEY AUTO_INCREMENT,
+    `product_id` INT NOT NULL,
+    `tag_id` INT NOT NULL,
+    `is_ai_generated` BOOLEAN DEFAULT FALSE,
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`product_id`) REFERENCES `product`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`tag_id`) REFERENCES `tag`(`id`) ON DELETE CASCADE,
+    UNIQUE KEY `uq_product_tag` (`product_id`, `tag_id`),
+    INDEX `idx_product_id` (`product_id`),
+    INDEX `idx_tag_id` (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

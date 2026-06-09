@@ -2,7 +2,7 @@
   <div class="publish-page">
     <header class="header">
       <div class="header-content">
-        <h1 class="logo" @click="$router.push('/')">GoodDog</h1>
+        <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
       </div>
     </header>
 
@@ -49,21 +49,67 @@
           </el-upload>
         </el-form-item>
 
+        <el-form-item label="商品标签">
+          <div class="tags-input-area">
+            <div class="selected-tags">
+              <el-tag
+                v-for="tag in form.tags"
+                :key="tag.id || tag.name"
+                :color="tag.color || '#409eff'"
+                style="color: white; margin: 4px;"
+                closable
+                @close="removeTag(tag)"
+              >
+                {{ tag.name }}
+              </el-tag>
+              <el-button size="small" @click="showTagDialog = true">+ 添加标签</el-button>
+            </div>
+            <p class="tag-hint">AI将自动识别商品并生成标签，您也可以手动添加</p>
+          </div>
+        </el-form-item>
+
         <el-form-item>
           <el-button type="primary" @click="handleSubmit" :loading="loading">发布</el-button>
           <el-button @click="$router.back()">取消</el-button>
         </el-form-item>
       </el-form>
     </div>
+
+    <el-dialog v-model="showTagDialog" title="选择或创建标签" width="500px">
+      <el-input
+        v-model="newTagName"
+        placeholder="输入新标签名称，按回车创建"
+        @keyup.enter="createNewTag"
+      >
+        <template #append>
+          <el-button @click="createNewTag">创建</el-button>
+        </template>
+      </el-input>
+      <div class="existing-tags" v-if="availableTags.length > 0">
+        <p>已有标签（点击选择）：</p>
+        <div class="tags-container">
+          <el-tag
+            v-for="tag in availableTags"
+            :key="tag.id"
+            :color="tag.color"
+            style="color: white; margin: 4px; cursor: pointer;"
+            :type="isTagSelected(tag) ? 'primary' : 'info'"
+            @click="selectTag(tag)"
+          >
+            {{ tag.name }}
+          </el-tag>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { productAPI, aiAPI } from '@/api/modules'
+import { productAPI, aiAPI, tagAPI } from '@/api/modules'
 
 const router = useRouter()
 
@@ -71,12 +117,16 @@ const formRef = ref(null)
 const uploadRef = ref(null)
 const loading = ref(false)
 const fileList = ref([])
+const showTagDialog = ref(false)
+const newTagName = ref('')
+const availableTags = ref([])
 
 const form = reactive({
   type: 'sell',
   title: '',
   description: '',
-  price: null
+  price: null,
+  tags: []
 })
 
 const rules = {
@@ -85,8 +135,50 @@ const rules = {
   description: [{ required: true, message: '请输入商品描述', trigger: 'blur' }]
 }
 
+async function fetchAvailableTags() {
+  try {
+    const res = await tagAPI.getList({ per_page: 100 })
+    availableTags.value = res.data.tags || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
 function handleFileChange(file) {
   fileList.value = [file]
+}
+
+function isTagSelected(tag) {
+  return form.tags.some(t => t.id === tag.id || t.name === tag.name)
+}
+
+function selectTag(tag) {
+  if (isTagSelected(tag)) {
+    form.tags = form.tags.filter(t => t.id !== tag.id && t.name !== tag.name)
+  } else {
+    form.tags.push({ ...tag })
+  }
+}
+
+function removeTag(tag) {
+  form.tags = form.tags.filter(t => t.id !== tag.id && t.name !== tag.name)
+}
+
+async function createNewTag() {
+  if (!newTagName.value.trim()) {
+    ElMessage.warning('请输入标签名称')
+    return
+  }
+
+  const tagName = newTagName.value.trim()
+  if (form.tags.some(t => t.name === tagName)) {
+    ElMessage.warning('标签已存在')
+    return
+  }
+
+  form.tags.push({ name: tagName, color: '#409eff' })
+  newTagName.value = ''
+  ElMessage.success('标签已添加')
 }
 
 async function handleSubmit() {
@@ -107,14 +199,34 @@ async function handleSubmit() {
     }
 
     const res = await productAPI.create(formData)
+    const productId = res.data.product.id
+
+    if (form.tags.length > 0) {
+      for (const tag of form.tags) {
+        try {
+          if (tag.id) {
+            await tagAPI.addProductTag(productId, { tag_id: tag.id })
+          } else {
+            await tagAPI.addProductTag(productId, { tag_name: tag.name })
+          }
+        } catch (e) {
+          console.error('Failed to add tag:', e)
+        }
+      }
+    }
+
     ElMessage.success('发布成功')
-    router.push(`/product/${res.data.product.id}`)
+    router.push(`/product/${productId}`)
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  fetchAvailableTags()
+})
 </script>
 
 <style scoped>
@@ -151,5 +263,37 @@ async function handleSubmit() {
 
 .main-content h2 {
   margin-bottom: 30px;
+}
+
+.tags-input-area {
+  width: 100%;
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tag-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.existing-tags {
+  margin-top: 16px;
+}
+
+.existing-tags p {
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, g
 
-from models import db, Message
+from models import db, Message, User
 from app import log_action, token_required
 
 bp = Blueprint('messages', __name__)
@@ -41,12 +41,22 @@ def get_conversations():
         (Message.from_user == g.user.id) | (Message.to_user == g.user.id)
     ).order_by(Message.create_time.desc()).all()
 
+    user_ids = set()
+    for msg in messages:
+        other_user_id = msg.to_user if msg.from_user == g.user.id else msg.from_user
+        user_ids.add(other_user_id)
+
+    users = {user.id: user for user in User.query.filter(User.id.in_(user_ids)).all()}
+
     conversation_dict = {}
     for msg in messages:
         other_user_id = msg.to_user if msg.from_user == g.user.id else msg.from_user
         if other_user_id not in conversation_dict:
+            other_user = users.get(other_user_id)
+            username = other_user.username if other_user else f'用户{other_user_id}'
             conversation_dict[other_user_id] = {
                 'user_id': other_user_id,
+                'username': username,
                 'last_message': msg.to_dict(),
                 'unread_count': 0
             }

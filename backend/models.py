@@ -48,8 +48,10 @@ class Product(db.Model):
     create_time = db.Column(db.DateTime, default=datetime.utcnow)
 
     transactions = db.relationship('Transaction', backref='product', lazy='dynamic')
+    tags = db.relationship('ProductTag', backref='product', lazy='dynamic')
 
     def to_dict(self):
+        tags = [pt.tag.to_dict() for pt in self.tags.all()] if hasattr(self, 'tags') else []
         return {
             'id': self.id,
             'title': self.title,
@@ -60,7 +62,8 @@ class Product(db.Model):
             'user_id': self.user_id,
             'status': self.status,
             'create_time': utc_to_local(self.create_time),
-            'publisher': self.publisher.username if self.publisher else None
+            'publisher': self.publisher.username if self.publisher else None,
+            'tags': tags
         }
 
 class Transaction(db.Model):
@@ -124,4 +127,47 @@ class SystemLog(db.Model):
             'action': self.action,
             'detail': self.detail,
             'timestamp': utc_to_local(self.timestamp)
+        }
+
+class Tag(db.Model):
+    __tablename__ = 'tag'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    color = db.Column(db.String(20), default='#409eff')
+    is_ai_generated = db.Column(db.Boolean, default=False)
+    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+
+    products = db.relationship('ProductTag', backref='tag', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'color': self.color,
+            'is_ai_generated': self.is_ai_generated,
+            'create_time': utc_to_local(self.create_time)
+        }
+
+class ProductTag(db.Model):
+    __tablename__ = 'product_tag'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    tag_id = db.Column(db.Integer, db.ForeignKey('tag.id'), nullable=False)
+    is_ai_generated = db.Column(db.Boolean, default=False)
+    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'tag_id', name='uq_product_tag'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'tag_id': self.tag_id,
+            'tag': self.tag.to_dict() if self.tag else None,
+            'is_ai_generated': self.is_ai_generated,
+            'create_time': utc_to_local(self.create_time)
         }

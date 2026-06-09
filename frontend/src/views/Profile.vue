@@ -2,7 +2,7 @@
   <div class="profile-page">
     <header class="header">
       <div class="header-content">
-        <h1 class="logo" @click="$router.push('/')">GoodDog</h1>
+        <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
       </div>
     </header>
 

@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import hashlib
 import os
+import base64
+import requests
 from datetime import datetime
 
 class ImageProcessor:
@@ -74,6 +76,68 @@ class ImageProcessor:
         filepath = os.path.join(output_dir, filename)
         cv2.imwrite(filepath, img)
         return filename
+
+    @staticmethod
+    def image_to_base64(img):
+        _, buffer = cv2.imencode('.jpg', img)
+        return base64.b64encode(buffer).decode('utf-8')
+
+    @staticmethod
+    def recognize_with_qwen(image_input, api_key, base_url=None):
+        base_url = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+        try:
+            img = ImageProcessor.read_image(image_input)
+            if img is None:
+                return {'tags': ['图片'], 'source': 'fallback'}
+
+            img = ImageProcessor.resize_image(img, max_dimension=1024)
+            base64_image = ImageProcessor.image_to_base64(img)
+
+            url = f"{base_url}/chat/completions"
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            }
+            data = {
+                'model': 'qwen3.7-plus',
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': '请识别这张图片中的物品，并生成3-5个合适的二手市场标签。只返回JSON数组格式，例如：["电子产品", "手机", "九成新"]。不要返回任何其他内容。'
+                            },
+                            {
+                                'type': 'image_url',
+                                'image_url': {
+                                    'url': f'data:image/jpeg;base64,{base64_image}'
+                                }
+                            }
+                        ]
+                    }
+                ],
+                'max_tokens': 200
+            }
+
+            response = requests.post(url, json=data, headers=headers, timeout=15)
+            result = response.json()
+
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content'].strip()
+                import json
+                tags = json.loads(content)
+                if isinstance(tags, list):
+                    return {
+                        'tags': tags[:5],
+                        'source': 'qwen-vision'
+                    }
+
+        except Exception as e:
+            print(f'Qwen vision recognition error: {e}')
+
+        return {'tags': ['二手商品'], 'source': 'fallback'}
 
 def preprocess_pipeline(image_input, output_dir=None):
     img = ImageProcessor.read_image(image_input)

@@ -2,7 +2,7 @@
   <div class="messages-page">
     <header class="header">
       <div class="header-content">
-        <h1 class="logo" @click="$router.push('/')">GoodDog</h1>
+        <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
         <div class="user-area">
           <span class="username">{{ userStore.userInfo?.username }}</span>
           <router-link to="/profile">个人中心</router-link>
@@ -22,7 +22,7 @@
             @click="selectConversation(conv)"
           >
             <div class="conversation-user">
-              <span>用户 {{ conv.user_id }}</span>
+              <span>{{ conv.username }}</span>
               <el-badge :value="conv.unread_count" :hidden="conv.unread_count === 0" />
             </div>
             <div class="last-message" v-if="conv.last_message">
@@ -35,18 +35,20 @@
         <div class="chat-area">
           <template v-if="currentChatUser">
             <div class="chat-header">
-              <span>与用户 {{ currentChatUser }} 的对话</span>
+              <span>与 {{ currentUsername }} 的对话</span>
             </div>
             <div class="chat-messages" ref="messagesContainer">
-              <div
-                v-for="msg in messages"
-                :key="msg.id"
-                class="message-item"
-                :class="{ own: msg.from_user === userStore.userInfo?.id }"
-              >
-                <div class="message-content">{{ msg.content }}</div>
-                <div class="message-time">{{ msg.create_time }}</div>
-              </div>
+              <template v-for="(msg, index) in messages" :key="msg.id">
+                <div v-if="shouldShowTime(msg, index, messages)" class="message-timestamp">
+                  {{ formatMessageTime(msg.create_time) }}
+                </div>
+                <div
+                  class="message-item"
+                  :class="{ own: userStore.userInfo && Number(msg.from_user) === Number(userStore.userInfo.id) }"
+                >
+                  <div class="message-content">{{ msg.content }}</div>
+                </div>
+              </template>
             </div>
             <div class="chat-input">
               <el-input
@@ -77,8 +79,41 @@ const userStore = useUserStore()
 const conversations = ref([])
 const messages = ref([])
 const currentChatUser = ref(null)
+const currentUsername = ref('')
 const newMessage = ref('')
 const messagesContainer = ref(null)
+
+function formatMessageTime(timeStr) {
+  if (!timeStr) return ''
+  
+  const match = timeStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):\d{2}/)
+  if (!match) return timeStr
+  
+  const msgDate = new Date(match[1], match[2] - 1, match[3])
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+  
+  const msgTime = `${match[4]}:${match[5]}`
+  
+  if (msgDate.getTime() === today.getTime()) {
+    return msgTime
+  } else if (msgDate.getTime() === yesterday.getTime()) {
+    return `昨天 ${msgTime}`
+  } else {
+    return `${match[2]}-${match[3]} ${msgTime}`
+  }
+}
+
+function shouldShowTime(msg, index, messages) {
+  if (index === 0) return true
+  
+  const currentTime = new Date(msg.create_time.replace(/-/g, '/'))
+  const prevTime = new Date(messages[index - 1].create_time.replace(/-/g, '/'))
+  
+  const diffMinutes = Math.abs((currentTime - prevTime) / (1000 * 60))
+  return diffMinutes >= 15
+}
 
 async function fetchConversations() {
   try {
@@ -91,6 +126,7 @@ async function fetchConversations() {
 
 async function selectConversation(conv) {
   currentChatUser.value = conv.user_id
+  currentUsername.value = conv.username
 
   try {
     await messageAPI.markAllAsRead(conv.user_id)
@@ -137,12 +173,22 @@ function scrollToBottom() {
   })
 }
 
-onMounted(() => {
-  fetchConversations()
+onMounted(async () => {
+  await userStore.fetchUserInfo()
+  await fetchConversations()
 
   if (route.query.to_user) {
-    currentChatUser.value = parseInt(route.query.to_user)
-    fetchMessages()
+    const toUserId = parseInt(route.query.to_user)
+    currentChatUser.value = toUserId
+    
+    const conv = conversations.value.find(c => c.user_id === toUserId)
+    if (conv) {
+      currentUsername.value = conv.username
+    } else {
+      currentUsername.value = `用户${toUserId}`
+    }
+    
+    await fetchMessages()
   }
 })
 </script>
@@ -249,20 +295,25 @@ onMounted(() => {
   flex: 1;
   padding: 16px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .message-item {
   margin-bottom: 16px;
   max-width: 70%;
+  align-self: flex-start;
 }
 
 .message-item.own {
-  margin-left: auto;
+  align-self: flex-end;
+  margin-right: 0;
 }
 
 .message-item.own .message-content {
   background: #409eff;
   color: white;
+  border-radius: 8px;
 }
 
 .message-content {
@@ -270,6 +321,14 @@ onMounted(() => {
   padding: 10px 14px;
   border-radius: 8px;
   word-break: break-word;
+  display: inline-block;
+}
+
+.message-timestamp {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  margin: 12px 0;
 }
 
 .message-time {

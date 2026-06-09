@@ -2,7 +2,7 @@
   <div class="home-page">
     <header class="header">
       <div class="header-content">
-        <h1 class="logo" @click="$router.push('/')">GoodDog</h1>
+        <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
         <nav class="nav">
           <router-link to="/products">商品</router-link>
           <router-link to="/messages" v-if="userStore.isLoggedIn">消息</router-link>

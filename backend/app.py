@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify, g
 import jwt
 
 from config import config
-from models import db, User, Product, Transaction, Message, SystemLog
+from models import db, User, Product, Transaction, Message, SystemLog, Tag, ProductTag
 
 def create_app(config_name='default'):
     app = Flask(__name__)
@@ -31,7 +31,7 @@ def create_app(config_name='default'):
     return app
 
 def register_blueprints(app):
-    from routes import auth, products, transactions, messages, users, ai, logs, stats
+    from routes import auth, products, transactions, messages, users, ai, logs, stats, tags
 
     app.register_blueprint(auth.bp, url_prefix='/api/auth')
     app.register_blueprint(products.bp, url_prefix='/api/products')
@@ -41,6 +41,7 @@ def register_blueprints(app):
     app.register_blueprint(ai.bp, url_prefix='/api/ai')
     app.register_blueprint(logs.bp, url_prefix='/api/logs')
     app.register_blueprint(stats.bp, url_prefix='/api/stats')
+    app.register_blueprint(tags.bp, url_prefix='/api/tags')
 
 def register_hooks(app):
     @app.before_request

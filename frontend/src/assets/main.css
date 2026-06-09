@@ -64,3 +64,10 @@ input, textarea, button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.chinese-name {
+  font-size: 14px;
+  font-weight: normal;
+  color: #999;
+  margin-left: 8px;
+}
