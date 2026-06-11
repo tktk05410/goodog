@@ -1,14 +1,17 @@
 <template>
-  <div class="publish-page">
+  <div class="edit-page">
     <header class="header">
       <div class="header-content">
         <h1 class="logo" @click="$router.push('/')">goodog <span class="chinese-name">闲狗</span></h1>
       </div>
     </header>
 
-    <div class="main-content">
-      <h2>发布商品</h2>
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+    <div class="main-content" v-loading="loading">
+      <h2>编辑商品</h2>
+
+      <el-empty v-if="!product && !loading" description="商品不存在或无权限编辑" />
+
+      <el-form v-if="product" :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="商品类型" prop="type">
           <el-radio-group v-model="form.type">
             <el-radio label="sell">出售</el-radio>
@@ -17,7 +20,7 @@
         </el-form-item>
 
         <el-form-item label="商品标题" prop="title">
-          <el-input v-model="form.title" placeholder="请输入商品标题" maxlength="100" show-word-limit @input="triggerPriceEstimate" />
+          <el-input v-model="form.title" placeholder="请输入商品标题" maxlength="100" show-word-limit />
         </el-form-item>
 
         <el-form-item label="商品描述" prop="description">
@@ -28,7 +31,6 @@
             :rows="6"
             maxlength="1000"
             show-word-limit
-            @input="triggerPriceEstimate"
           />
         </el-form-item>
 
@@ -42,29 +44,32 @@
           </el-radio-group>
         </el-form-item>
 
+        <el-form-item label="商品状态" prop="status">
+          <el-radio-group v-model="form.status">
+            <el-radio label="on">上架</el-radio>
+            <el-radio label="off">下架</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
         <el-form-item label="商品图片">
-          <el-upload
-            ref="uploadRef"
-            :auto-upload="false"
-            :limit="1"
-            :on-change="handleFileChange"
-            :file-list="fileList"
-            list-type="picture-card"
-            accept="image/*"
-          >
-            <el-icon><Plus /></el-icon>
-          </el-upload>
+          <div class="image-upload-area">
+            <img v-if="currentImageUrl" :src="currentImageUrl" class="current-image" />
+            <el-upload
+              ref="uploadRef"
+              :auto-upload="false"
+              :limit="1"
+              :on-change="handleFileChange"
+              :file-list="fileList"
+              list-type="picture-card"
+              accept="image/*"
+            >
+              <el-icon><Plus /></el-icon>
+            </el-upload>
+          </div>
         </el-form-item>
 
         <el-form-item label="商品价格" prop="price" v-if="form.type === 'sell'">
-          <div class="price-area">
-            <el-input-number v-model="form.price" :min="0" :precision="2" placeholder="请输入价格" />
-            <div v-if="estimatedPrice" class="estimated-price">
-              <span class="price-label">AI参考价格：</span>
-              <span class="price-range">¥{{ estimatedPrice.min_price }} - ¥{{ estimatedPrice.max_price }}</span>
-              <el-button size="small" type="primary" link @click="useEstimatedPrice">使用</el-button>
-            </div>
-          </div>
+          <el-input-number v-model="form.price" :min="0" :precision="2" placeholder="请输入价格" />
         </el-form-item>
 
         <el-form-item label="商品标签">
@@ -79,15 +84,15 @@
                 @close="removeTag(tag)"
               >
                 {{ tag.name }}
+                <el-tag v-if="tag.is_ai_generated" size="small" type="info" style="margin-left: 4px; font-size: 10px;">AI</el-tag>
               </el-tag>
               <el-button size="small" @click="showTagDialog = true">+ 添加标签</el-button>
             </div>
-            <p class="tag-hint">AI将自动识别商品并生成标签，您也可以手动添加</p>
           </div>
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleSubmit" :loading="loading">发布</el-button>
+          <el-button type="primary" @click="handleSubmit" :loading="submitting">保存</el-button>
           <el-button @click="$router.back()">取消</el-button>
         </el-form-item>
       </el-form>
@@ -123,30 +128,33 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { productAPI, aiAPI, tagAPI } from '@/api/modules'
+import { useUserStore } from '@/store/user'
+import { productAPI, tagAPI } from '@/api/modules'
 
 const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
 
 const formRef = ref(null)
 const uploadRef = ref(null)
 const loading = ref(false)
+const submitting = ref(false)
 const fileList = ref([])
 const showTagDialog = ref(false)
 const newTagName = ref('')
 const availableTags = ref([])
-const estimatedPrice = ref(null)
-const priceEstimating = ref(false)
-let priceEstimateTimer = null
+const product = ref(null)
 
 const form = reactive({
   type: 'sell',
   title: '',
   description: '',
   price: null,
+  status: 'on',
   condition: '',
   tags: []
 })
@@ -155,6 +163,49 @@ const rules = {
   type: [{ required: true, message: '请选择商品类型', trigger: 'change' }],
   title: [{ required: true, message: '请输入商品标题', trigger: 'blur' }],
   description: [{ required: true, message: '请输入商品描述', trigger: 'blur' }]
+}
+
+const currentImageUrl = computed(() => {
+  if (fileList.value.length > 0 && fileList.value[0].url) {
+    return fileList.value[0].url
+  }
+  if (product.value?.image_path) {
+    return `/uploads/${product.value.image_path}`
+  }
+  return null
+})
+
+async function fetchProduct() {
+  loading.value = true
+  try {
+    const res = await productAPI.getById(route.params.id)
+    const p = res.data.product
+
+    if (p.user_id !== userStore.userInfo?.id) {
+      ElMessage.error('只能编辑自己发布的商品')
+      router.back()
+      return
+    }
+
+    product.value = p
+    form.type = p.type
+    form.title = p.title
+    form.description = p.description
+    form.price = p.price
+    form.status = p.status
+
+    const conditionTags = ['全新未拆封', '几乎全新', '轻微使用痕迹', '中度使用痕迹', '严重使用痕迹']
+    const tags = (p.tags || []).map(t => ({ ...t }))
+    const conditionTag = tags.find(t => conditionTags.includes(t.name))
+    if (conditionTag) {
+      form.condition = conditionTag.name
+    }
+    form.tags = tags
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function fetchAvailableTags() {
@@ -179,9 +230,6 @@ function handleConditionChange(val) {
   if (val) {
     form.tags.push({ name: val, color: '#67c23a' })
   }
-
-  // Trigger price estimation when condition changes
-  triggerPriceEstimate()
 }
 
 function isTagSelected(tag) {
@@ -200,7 +248,7 @@ function removeTag(tag) {
   form.tags = form.tags.filter(t => t.id !== tag.id && t.name !== tag.name)
 }
 
-async function createNewTag() {
+function createNewTag() {
   if (!newTagName.value.trim()) {
     ElMessage.warning('请输入标签名称')
     return
@@ -217,95 +265,47 @@ async function createNewTag() {
   ElMessage.success('标签已添加')
 }
 
-function triggerPriceEstimate() {
-  if (priceEstimateTimer) {
-    clearTimeout(priceEstimateTimer)
-  }
-  priceEstimateTimer = setTimeout(() => {
-    if (form.title && form.description && form.condition) {
-      estimatePrice()
-    }
-  }, 1000)
-}
-
-async function estimatePrice() {
-  if (!form.title || !form.description || !form.condition) {
-    return
-  }
-  priceEstimating.value = true
-  try {
-    const res = await aiAPI.estimatePrice({
-      title: form.title,
-      description: form.description,
-      condition: form.condition
-    })
-    if (res.data.min_price && res.data.max_price) {
-      estimatedPrice.value = res.data
-    }
-  } catch (e) {
-    console.error('Price estimation failed:', e)
-  } finally {
-    priceEstimating.value = false
-  }
-}
-
-function useEstimatedPrice() {
-  if (estimatedPrice.value) {
-    form.price = Math.round((estimatedPrice.value.min_price + estimatedPrice.value.max_price) / 2 * 100) / 100
-    ElMessage.success('已使用AI参考价格')
-  }
-}
-
 async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
-  loading.value = true
+  submitting.value = true
   try {
     const formData = new FormData()
     formData.append('title', form.title)
     formData.append('description', form.description)
     formData.append('type', form.type)
+    formData.append('status', form.status)
     if (form.price) {
       formData.append('price', form.price)
     }
     if (fileList.value.length > 0) {
       formData.append('image', fileList.value[0].raw)
     }
+    formData.append('tags', JSON.stringify(form.tags.map(t => ({
+      id: t.id || null,
+      name: t.name
+    }))))
 
-    const res = await productAPI.create(formData)
-    const productId = res.data.product.id
+    await productAPI.update(route.params.id, formData)
 
-    if (form.tags.length > 0) {
-      for (const tag of form.tags) {
-        try {
-          if (tag.id) {
-            await tagAPI.addProductTag(productId, { tag_id: tag.id })
-          } else {
-            await tagAPI.addProductTag(productId, { tag_name: tag.name })
-          }
-        } catch (e) {
-          console.error('Failed to add tag:', e)
-        }
-      }
-    }
-
-    ElMessage.success('发布成功')
-    router.push(`/product/${productId}`)
+    ElMessage.success('保存成功')
+    router.push(`/product/${route.params.id}`)
   } catch (e) {
     console.error(e)
   } finally {
-    loading.value = false
+    submitting.value = false
   }
 }
 
 onMounted(() => {
+  fetchProduct()
   fetchAvailableTags()
 })
 </script>
 
 <style scoped>
-.publish-page {
+.edit-page {
   min-height: 100vh;
   background-color: #f5f5f5;
 }
@@ -355,31 +355,17 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-.price-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.estimated-price {
+.image-upload-area {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: #f0f9ff;
+  gap: 16px;
+}
+
+.current-image {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
   border-radius: 8px;
-  font-size: 14px;
-}
-
-.price-label {
-  color: #666;
-  font-weight: 500;
-}
-
-.price-range {
-  color: #e6a23c;
-  font-weight: bold;
-  font-size: 16px;
 }
 
 .tags-input-area {
@@ -391,12 +377,6 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-}
-
-.tag-hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #999;
 }
 
 .existing-tags {

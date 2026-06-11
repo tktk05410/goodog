@@ -49,7 +49,7 @@ def batch_generate_tags():
             if product.image_path:
                 try:
                     from ai_services.image_processor import ImageProcessor
-                    image_path = os.path.join('d:\\End-of-term Professional Comprehensive Practice\\project\\goodog\\uploads', product.image_path)
+                    image_path = os.path.join(app.config['UPLOAD_FOLDER'], product.image_path)
                     if os.path.exists(image_path):
                         from ai_services.text_classifier import TextClassifier
                         classifier = TextClassifier()

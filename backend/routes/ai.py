@@ -1,9 +1,11 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
+import os
 import cv2
 import numpy as np
 
 from models import db, Product
 from app import log_action, token_required
+from ai_services.text_classifier import TextClassifier
 
 bp = Blueprint('ai', __name__)
 
@@ -12,7 +14,7 @@ def classify_text():
     data = request.get_json()
     text = data.get('text', '')
 
-    keywords_sell = ['出售', '卖', '转让', 'sell', 'sell', '转让', '闲置', '二手']
+    keywords_sell = ['出售', '卖', '转让', 'sell', '闲置', '二手']
     keywords_buy = ['求购', '买', '需要', 'buy', 'want', '收购', '想要']
 
     text_lower = text.lower()
@@ -121,15 +123,15 @@ def search_by_image():
     file = request.files['image']
 
     try:
+        from ai_services.image_processor import ImageProcessor
+
         in_memory_file = file.read()
-        nparr = np.frombuffer(in_memory_file, np.uint8)
-        query_img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+        query_img = ImageProcessor.read_image(in_memory_file)
 
         if query_img is None:
             return jsonify({'error': 'Invalid image format'}), 400
 
-        query_hist = cv2.calcHist([query_img], [0], None, [256], [0, 256])
-        query_hist = query_hist.flatten() / query_hist.sum()
+        query_hist = ImageProcessor.extract_histogram(query_img)
 
         products = Product.query.filter(
             Product.image_path.isnot(None),
@@ -138,10 +140,20 @@ def search_by_image():
 
         results = []
         for product in products:
-            results.append({
-                'product': product.to_dict(),
-                'similarity': 0.85
-            })
+            try:
+                product_path = os.path.join(current_app.config['UPLOAD_FOLDER'], product.image_path)
+                if os.path.exists(product_path):
+                    product_img = ImageProcessor.read_image(product_path)
+                    if product_img is not None:
+                        product_hist = ImageProcessor.extract_histogram(product_img)
+                        similarity = float(ImageProcessor.compare_histograms(query_hist, product_hist))
+                        results.append({
+                            'product': product.to_dict(),
+                            'similarity': similarity
+                        })
+            except Exception as e:
+                print(f'Image comparison error for product {product.id}: {e}')
+                continue
 
         results.sort(key=lambda x: x['similarity'], reverse=True)
 
@@ -151,3 +163,25 @@ def search_by_image():
 
     except Exception as e:
         return jsonify({'error': f'Image search failed: {str(e)}'}), 500
+
+@bp.route('/estimate-price', methods=['POST'])
+def estimate_price():
+    """根据商品标题、描述和成色估算二手价格"""
+    data = request.get_json()
+    title = data.get('title', '')
+    description = data.get('description', '')
+    condition = data.get('condition', '')
+
+    if not title or not description:
+        return jsonify({'error': '标题和描述不能为空'}), 400
+
+    classifier = TextClassifier()
+    result = classifier.estimate_price_with_qwen(title, description, condition)
+
+    log_action('AI_PRICE_ESTIMATE', {
+        'title': title[:50],
+        'condition': condition,
+        'result': result
+    })
+
+    return jsonify(result)

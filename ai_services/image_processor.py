@@ -1,10 +1,7 @@
 import cv2
 import numpy as np
-import hashlib
-import os
 import base64
 import requests
-from datetime import datetime
 
 class ImageProcessor:
     @staticmethod
@@ -69,15 +66,6 @@ class ImageProcessor:
         return cv2.compareHist(hist1.astype(np.float32), hist2.astype(np.float32), cv2.HISTCMP_CORREL)
 
     @staticmethod
-    def save_processed_image(img, output_dir, original_filename):
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        hash_name = hashlib.md5((original_filename + timestamp).encode()).hexdigest()
-        filename = f'{hash_name}.jpg'
-        filepath = os.path.join(output_dir, filename)
-        cv2.imwrite(filepath, img)
-        return filename
-
-    @staticmethod
     def image_to_base64(img):
         _, buffer = cv2.imencode('.jpg', img)
         return base64.b64encode(buffer).decode('utf-8')
@@ -138,33 +126,3 @@ class ImageProcessor:
             print(f'Qwen vision recognition error: {e}')
 
         return {'tags': ['二手商品'], 'source': 'fallback'}
-
-def preprocess_pipeline(image_input, output_dir=None):
-    img = ImageProcessor.read_image(image_input)
-    if img is None:
-        raise ValueError('Invalid image input')
-
-    gray = ImageProcessor.to_grayscale(img)
-
-    denoised = ImageProcessor.denoise(gray)
-
-    edges = ImageProcessor.detect_edges(denoised)
-
-    resized = ImageProcessor.resize_image(img)
-
-    return {
-        'original': img,
-        'grayscale': gray,
-        'denoised': denoised,
-        'edges': edges,
-        'resized': resized
-    }
-
-def extract_image_features(image_input):
-    img = ImageProcessor.read_image(image_input)
-    if img is None:
-        raise ValueError('Invalid image input')
-
-    features = ImageProcessor.extract_features(img)
-
-    return features

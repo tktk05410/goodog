@@ -15,6 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
+COPY ai_services/ ./ai_services/
 COPY app.py .
 
 ENV FLASK_APP=app.py

@@ -1,85 +1,15 @@
 import json
-import hashlib
 import requests
-import time
-from datetime import datetime
+
+import os
 
 class TextClassifier:
-    SELL_KEYWORDS = ['出售', '卖', '转让', 'sell', 'sell', '转让', '闲置', '二手', '全新', '低价']
+    SELL_KEYWORDS = ['出售', '卖', '转让', 'sell', '闲置', '二手', '全新', '低价']
     BUY_KEYWORDS = ['求购', '买', '需要', 'buy', 'want', '收购', '想要', '急求']
 
     def __init__(self, api_key=None, base_url=None):
-        self.api_key = "sk-e5c99531661b4d4d855010bdff09c3e5"
+        self.api_key = api_key or os.environ.get('QWEN_API_KEY', '')
         self.base_url = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-    def classify(self, text):
-        text_lower = text.lower()
-
-        sell_score = sum(1 for kw in self.SELL_KEYWORDS if kw in text_lower)
-        buy_score = sum(1 for kw in self.BUY_KEYWORDS if kw in text_lower)
-
-        if sell_score > buy_score:
-            return {
-                'type': 'sell',
-                'confidence': sell_score / (sell_score + buy_score + 1),
-                'scores': {'sell': sell_score, 'buy': buy_score}
-            }
-        elif buy_score > sell_score:
-            return {
-                'type': 'buy',
-                'confidence': buy_score / (sell_score + buy_score + 1),
-                'scores': {'sell': sell_score, 'buy': buy_score}
-            }
-        else:
-            return {
-                'type': 'sell',
-                'confidence': 0.5,
-                'scores': {'sell': sell_score, 'buy': buy_score}
-            }
-
-    def classify_with_qwen(self, text):
-        if not self.api_key:
-            return self.classify(text)
-
-        try:
-            url = f"{self.base_url}/chat/completions"
-            headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {self.api_key}'
-            }
-            data = {
-                'model': 'qwen3.7-plus',
-                'messages': [
-                    {
-                        'role': 'system',
-                        'content': '你是一个二手市场文本分类器。请分析用户输入的文本，判断其意图是"出售"(sell)还是"求购"(buy)。只返回JSON格式：{"type": "sell"或"buy", "confidence": 0-1之间的数字}'
-                    },
-                    {
-                        'role': 'user',
-                        'content': text
-                    }
-                ],
-                'temperature': 0.1,
-                'max_tokens': 100
-            }
-
-            response = requests.post(url, json=data, headers=headers, timeout=10)
-            result = response.json()
-
-            if 'choices' in result and len(result['choices']) > 0:
-                content = result['choices'][0]['message']['content'].strip()
-                import json
-                parsed = json.loads(content)
-                return {
-                    'type': parsed.get('type', 'sell'),
-                    'confidence': parsed.get('confidence', 0.9),
-                    'source': 'qwen'
-                }
-
-        except Exception as e:
-            print(f'Qwen API error: {e}')
-
-        return self.classify(text)
 
     def generate_tags_with_qwen(self, title, description):
         if not self.api_key:
@@ -131,6 +61,57 @@ class TextClassifier:
 
         return self.generate_tags_by_keywords(title, description)
 
+    def estimate_price_with_qwen(self, title, description, condition):
+        """使用Qwen模型估算二手商品价格"""
+        if not self.api_key:
+            return {'min_price': 0, 'max_price': 0, 'source': 'fallback'}
+
+        try:
+            url = f"{self.base_url}/chat/completions"
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {self.api_key}'
+            }
+            data = {
+                'model': 'qwen3.7-plus',
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': '''你是一个二手市场价格估算专家。请根据商品标题、描述和成色，估算一个合理的二手价格范围。
+要求：
+1. 价格单位为人民币（元）
+2. 返回JSON格式：{"min_price": 最低价格（数字）, "max_price": 最高价格（数字）}
+3. 价格范围不要太大，max_price - min_price 不超过 min_price 的 30%
+4. 只返回JSON，不要返回任何其他内容
+5. 考虑因素：商品类型、品牌、成色、市场行情'''
+                    },
+                    {
+                        'role': 'user',
+                        'content': f'标题：{title}\n描述：{description}\n成色：{condition}'
+                    }
+                ],
+                'temperature': 0.2,
+                'max_tokens': 100
+            }
+
+            response = requests.post(url, json=data, headers=headers, timeout=15)
+            result = response.json()
+
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content'].strip()
+                import json
+                parsed = json.loads(content)
+                return {
+                    'min_price': parsed.get('min_price', 0),
+                    'max_price': parsed.get('max_price', 0),
+                    'source': 'qwen'
+                }
+
+        except Exception as e:
+            print(f'Qwen price estimation error: {e}')
+
+        return {'min_price': 0, 'max_price': 0, 'source': 'error'}
+
     def generate_tags_by_keywords(self, title, description):
         text = f'{title} {description}'.lower()
         tags = []
@@ -147,11 +128,11 @@ class TextClassifier:
         }
 
         condition_keywords = {
-            '全新': ['全新', '未拆封', 'new'],
-            '九成新': ['九成新', '几乎全新', '9成新'],
-            '八成新': ['八成新', '8成新', '轻微使用'],
-            '七成新': ['七成新', '7成新', '有使用痕迹'],
-            '二手': ['二手', '闲置', 'used'],
+            '全新未拆封': ['全新未拆封', '未拆封', '全新'],
+            '几乎全新': ['几乎全新', '九成新', '99新', '几乎没使用'],
+            '轻微使用痕迹': ['轻微使用', '轻微磨损', '细微使用', '细微磨损', '小瑕疵'],
+            '中度使用痕迹': ['中度使用', '中度磨损', '明显使用', '明显磨损'],
+            '严重使用痕迹': ['严重使用', '严重磨损', '大瑕疵', '破损'],
         }
 
         for category, keywords in category_keywords.items():

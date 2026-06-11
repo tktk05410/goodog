@@ -35,23 +35,23 @@
       <div class="charts-grid">
         <div class="chart-card">
           <h3>商品分类分布</h3>
-          <div ref="categoryChart" class="chart"></div>
+          <div ref="categoryChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
           <h3>商品状态分布</h3>
-          <div ref="statusChart" class="chart"></div>
+          <div ref="statusChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
           <h3>交易状态分布</h3>
-          <div ref="transactionChart" class="chart"></div>
+          <div ref="transactionChartRef" class="chart"></div>
         </div>
         <div class="chart-card">
           <h3>每日交易量</h3>
-          <div ref="dailyChart" class="chart"></div>
+          <div ref="dailyChartRef" class="chart"></div>
         </div>
         <div class="chart-card full-width">
           <h3>用户活跃时段</h3>
-          <div ref="hourlyChart" class="chart"></div>
+          <div ref="hourlyChartRef" class="chart"></div>
         </div>
       </div>
     </div>
@@ -74,6 +74,12 @@ const overview = reactive({
   completed_transactions: 0
 })
 
+const categoryChartRef = ref(null)
+const statusChartRef = ref(null)
+const transactionChartRef = ref(null)
+const dailyChartRef = ref(null)
+const hourlyChartRef = ref(null)
+
 let categoryChart = null
 let statusChart = null
 let transactionChart = null
@@ -90,11 +96,11 @@ async function fetchOverview() {
 }
 
 async function initCharts() {
-  categoryChart = echarts.init(document.querySelector('.stats-page .chart:nth-child(1)'))
-  statusChart = echarts.init(document.querySelector('.stats-page .chart:nth-child(2)'))
-  transactionChart = echarts.init(document.querySelector('.stats-page .chart:nth-child(3)'))
-  dailyChart = echarts.init(document.querySelector('.stats-page .chart:nth-child(4)'))
-  hourlyChart = echarts.init(document.querySelector('.stats-page .chart:nth-child(5)'))
+  categoryChart = echarts.init(categoryChartRef.value)
+  statusChart = echarts.init(statusChartRef.value)
+  transactionChart = echarts.init(transactionChartRef.value)
+  dailyChart = echarts.init(dailyChartRef.value)
+  hourlyChart = echarts.init(hourlyChartRef.value)
 
   try {
     const categoryRes = await statsAPI.getCategoryDistribution()

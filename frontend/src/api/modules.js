@@ -56,7 +56,8 @@ export const aiAPI = {
   }),
   searchByImage: (formData) => api.post('/ai/search-by-image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  }),
+  estimatePrice: (data) => api.post('/ai/estimate-price', data)
 }
 
 export const statsAPI = {

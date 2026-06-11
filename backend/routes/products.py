@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from sqlalchemy import or_
 
 from models import db, Product, Tag, ProductTag
@@ -25,7 +25,7 @@ def auto_generate_tags(product):
 
     if product.image_path:
         try:
-            image_path = os.path.join('d:\\End-of-term Professional Comprehensive Practice\\project\\goodog\\uploads', product.image_path)
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], product.image_path)
             if os.path.exists(image_path):
                 classifier = TextClassifier()
                 image_result = ImageProcessor.recognize_with_qwen(
@@ -169,6 +169,7 @@ def update_product(product_id):
     description = request.form.get('description', product.description)
     price = request.form.get('price', product.price)
     status = request.form.get('status', product.status)
+    tags_json = request.form.get('tags')
     image = request.files.get('image')
 
     product.title = title
@@ -180,6 +181,51 @@ def update_product(product_id):
         image_path = save_uploaded_file(image)
         if image_path:
             product.image_path = image_path
+
+    # Handle tags update
+    if tags_json:
+        import json
+        try:
+            tags_data = json.loads(tags_json)
+            # tags_data is a list of {id: x, name: y} or {name: y}
+            
+            # Get current tag IDs
+            current_product_tags = ProductTag.query.filter_by(product_id=product_id).all()
+            current_tag_ids = {pt.tag_id for pt in current_product_tags}
+            
+            new_tag_ids = set()
+            
+            for tag_data in tags_data:
+                tag_id = tag_data.get('id')
+                tag_name = tag_data.get('name')
+                
+                if tag_id:
+                    new_tag_ids.add(tag_id)
+                    # Check if association exists
+                    existing = ProductTag.query.filter_by(product_id=product_id, tag_id=tag_id).first()
+                    if not existing:
+                        product_tag = ProductTag(product_id=product_id, tag_id=tag_id, is_ai_generated=False)
+                        db.session.add(product_tag)
+                elif tag_name:
+                    tag = Tag.query.filter_by(name=tag_name).first()
+                    if not tag:
+                        tag = Tag(name=tag_name, color='#409eff')
+                        db.session.add(tag)
+                        db.session.flush()
+                    new_tag_ids.add(tag.id)
+                    existing = ProductTag.query.filter_by(product_id=product_id, tag_id=tag.id).first()
+                    if not existing:
+                        product_tag = ProductTag(product_id=product_id, tag_id=tag.id, is_ai_generated=False)
+                        db.session.add(product_tag)
+            
+            # Remove tags that are no longer selected
+            tags_to_remove = current_tag_ids - new_tag_ids
+            for tag_id in tags_to_remove:
+                pt = ProductTag.query.filter_by(product_id=product_id, tag_id=tag_id).first()
+                if pt:
+                    db.session.delete(pt)
+        except Exception as e:
+            print(f'Tag update error: {e}')
 
     db.session.commit()
 

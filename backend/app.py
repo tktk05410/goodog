@@ -1,9 +1,9 @@
 import os
-import json
+import sys
 import hashlib
 import datetime
 from functools import wraps
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, send_from_directory, current_app
 import jwt
 
 from config import config
@@ -14,7 +14,6 @@ def create_app(config_name='default'):
     app.config.from_object(config[config_name])
 
     app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
-    from flask import send_from_directory
     @app.route('/uploads/<filename>')
     def uploaded_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -119,7 +118,7 @@ def save_uploaded_file(file):
         filename = hashlib.md5((file.filename + str(datetime.datetime.utcnow())).encode()).hexdigest()
         ext = file.filename.rsplit('.', 1)[1].lower()
         filename = f'{filename}.{ext}'
-        filepath = os.path.join('d:\\End-of-term Professional Comprehensive Practice\\project\\goodog\\uploads', filename)
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         return filename
     return None
