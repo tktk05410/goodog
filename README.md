@@ -14,6 +14,9 @@ GoodDog 是一款面向高校学生的校园二手交易平台，旨在为在校
 | 商品详情 | `docs/images/product-detail.png` |
 | 发布商品 | `docs/images/publish.png` |
 | 个人中心 | `docs/images/profile.png` |
+| 统计页面 | `docs/images/stats.png` |
+| 对话页面 | `docs/images/messages.png` |
+| 项目管理后台 | `docs/images/admin.png` |
 
 ### 首页预览
 
@@ -30,6 +33,18 @@ GoodDog 是一款面向高校学生的校园二手交易平台，旨在为在校
 ### 个人中心
 
 ![个人中心](docs/images/profile.png)
+
+### 统计页面
+
+![统计页面](docs/images/stats.png)
+
+### 对话页面
+
+![对话页面](docs/images/messages.png)
+
+### 项目管理后台
+
+![项目管理后台](docs/images/admin.png)
 
 ## 技术架构
 
@@ -105,6 +120,33 @@ goodog/
 ├── uploads/              # 上传文件目录
 └── docker-compose.yml   # Docker 配置
 ```
+
+## 数据库设计
+
+本项目采用 MySQL 8.0 作为关系型数据库，库名为 `goodog_date`，字符集使用 `utf8mb4` 以支持完整中文与表情符号存储。数据库核心围绕 **用户、商品、交易、消息、标签、日志** 六大业务模块设计，通过外键与索引保证数据一致性与查询效率。
+
+### 核心数据表
+
+| 表名 | 说明 | 关键字段 |
+|------|------|----------|
+| `user` | 用户信息 | `id`、`username`、`password_hash`、`student_id`、`credit_score`、`face_encoding` |
+| `product` | 商品信息 | `id`、`title`、`description`、`type`（sell/buy）、`price`、`status`、`user_id` |
+| `transaction` | 交易订单 | `id`、`product_id`、`buyer_id`、`seller_id`、`state`（pending/paid/done/canceled） |
+| `message` | 用户消息 | `id`、`from_user`、`to_user`、`content`、`is_read`、`ai_summary` |
+| `system_log` | 系统操作日志 | `log_id`、`user_id`、`action`、`detail`（JSON）、`timestamp` |
+| `tag` | 标签字典 | `id`、`name`、`color`、`is_ai_generated` |
+| `product_tag` | 商品与标签多对多关联 | `id`、`product_id`、`tag_id`、`is_ai_generated` |
+
+### 设计要点
+
+- **用户与商品**：`product.user_id` 外键关联 `user.id`，发布者删除账号时级联删除其商品。
+- **商品与交易**：`transaction.product_id` 外键关联 `product.id`，确保每笔交易都有明确商品主体。
+- **用户与消息**：`message.from_user` / `to_user` 均外键关联 `user.id`，支持双向会话查询。
+- **标签系统**：`tag` 与 `product` 通过中间表 `product_tag` 实现多对多关系，支持 AI 生成标签标识。
+- **全文检索**：`product` 表对 `title` 与 `description` 建立 `FULLTEXT` 索引，用于商品搜索。
+- **统一字符集**：所有表使用 `utf8mb4_unicode_ci` 排序规则，避免中文与特殊字符存储问题。
+
+完整建表语句见 [`database/init_db.sql`](database/init_db.sql)。
 
 ## API 接口
 

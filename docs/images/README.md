@@ -10,6 +10,9 @@
 | 商品详情页 | `product-detail.png` |
 | 发布商品页 | `publish.png` |
 | 个人中心页 | `profile.png` |
+| 统计页面 | `stats.png` |
+| 对话页面 | `messages.png` |
+| 项目管理后台 | `admin.png` |
 
 ## 使用方式
 
