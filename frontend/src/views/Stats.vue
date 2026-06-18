@@ -59,10 +59,6 @@
           <h3>用户活跃时段</h3>
           <div ref="hourlyChartRef" class="chart"></div>
         </div>
-        <div class="chart-card full-width">
-          <h3>最近趋势</h3>
-          <div ref="trendChartRef" class="chart"></div>
-        </div>
       </div>
     </div>
   </div>
@@ -89,14 +85,12 @@ const statusChartRef = ref(null)
 const transactionChartRef = ref(null)
 const dailyChartRef = ref(null)
 const hourlyChartRef = ref(null)
-const trendChartRef = ref(null)
 
 let categoryChart = null
 let statusChart = null
 let transactionChart = null
 let dailyChart = null
 let hourlyChart = null
-let trendChart = null
 
 async function fetchOverview() {
   try {
@@ -113,7 +107,6 @@ async function initCharts() {
   transactionChart = echarts.init(transactionChartRef.value)
   dailyChart = echarts.init(dailyChartRef.value)
   hourlyChart = echarts.init(hourlyChartRef.value)
-  trendChart = echarts.init(trendChartRef.value)
 
   try {
     const categoryRes = await statsAPI.getCategoryDistribution()
@@ -186,43 +179,6 @@ async function initCharts() {
         data: hourlyRes.data.data.map(item => item.count)
       }]
     })
-
-    const trendRes = await statsAPI.getTrends({ days: 7 })
-    const trendDates = trendRes.data.data.map(item => item.date.slice(5))
-    trendChart.setOption({
-      tooltip: { trigger: 'axis' },
-      legend: {
-        data: ['新用户', '新商品', '新交易'],
-        bottom: 0
-      },
-      grid: { left: '3%', right: '4%', bottom: '12%', top: '10%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: trendDates
-      },
-      yAxis: { type: 'value' },
-      series: [
-        {
-          name: '新用户',
-          type: 'line',
-          smooth: true,
-          data: trendRes.data.data.map(item => item.new_users)
-        },
-        {
-          name: '新商品',
-          type: 'line',
-          smooth: true,
-          data: trendRes.data.data.map(item => item.new_products)
-        },
-        {
-          name: '新交易',
-          type: 'line',
-          smooth: true,
-          data: trendRes.data.data.map(item => item.new_transactions)
-        }
-      ]
-    })
   } catch (e) {
     console.error(e)
   }
@@ -234,7 +190,6 @@ function handleResize() {
   transactionChart?.resize()
   dailyChart?.resize()
   hourlyChart?.resize()
-  trendChart?.resize()
 }
 
 onMounted(() => {

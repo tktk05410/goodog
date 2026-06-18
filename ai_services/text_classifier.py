@@ -168,7 +168,7 @@ class TextClassifier:
                 'messages': [
                     {
                         'role': 'system',
-                        'content': '你是闲鱼文案写手。根据商品信息写80-150字的文案，突出性价比， 描述更详细。只返回文案。'
+                        'content': '你是闲鱼文案写手。根据商品信息写80-150字的活泼文案，用2-3个emoji，突出性价比，结尾引导互动。只返回文案。'
                     },
                     {
                         'role': 'user',
