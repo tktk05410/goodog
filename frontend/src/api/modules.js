@@ -70,7 +70,8 @@ export const statsAPI = {
   getDailyTransactions: (params) => api.get('/stats/daily-transactions', { params }),
   getHourlyActivity: () => api.get('/stats/hourly-activity'),
   getTopProducts: (params) => api.get('/stats/top-products', { params }),
-  getActiveUsers: (params) => api.get('/stats/active-users', { params })
+  getActiveUsers: (params) => api.get('/stats/active-users', { params }),
+  getTrendAnalysis: () => api.get('/stats/trend-analysis')
 }
 
 export const logAPI = {

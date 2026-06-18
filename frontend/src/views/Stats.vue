@@ -59,6 +59,13 @@
           <h3>用户活跃时段</h3>
           <div ref="hourlyChartRef" class="chart"></div>
         </div>
+        <div class="chart-card full-width trend-card">
+          <h3>AI 趋势分析</h3>
+          <div class="trend-content" v-loading="trendLoading">
+            <p v-if="trendAnalysis" class="trend-text">{{ trendAnalysis }}</p>
+            <p v-else class="trend-placeholder">正在生成趋势分析...</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -73,6 +80,8 @@ import { statsAPI } from '@/api/modules'
 const userStore = useUserStore()
 
 const loading = ref(false)
+const trendLoading = ref(false)
+const trendAnalysis = ref('')
 const overview = reactive({
   total_users: 0,
   total_products: 0,
@@ -98,6 +107,19 @@ async function fetchOverview() {
     Object.assign(overview, res.data)
   } catch (e) {
     console.error(e)
+  }
+}
+
+async function fetchTrendAnalysis() {
+  trendLoading.value = true
+  try {
+    const res = await statsAPI.getTrendAnalysis()
+    trendAnalysis.value = res.data.analysis
+  } catch (e) {
+    console.error(e)
+    trendAnalysis.value = '趋势分析加载失败，请稍后重试。'
+  } finally {
+    trendLoading.value = false
   }
 }
 
@@ -200,6 +222,7 @@ onMounted(() => {
   fetchOverview().finally(() => {
     loading.value = false
     initCharts()
+    fetchTrendAnalysis()
   })
   window.addEventListener('resize', handleResize)
 })
@@ -384,5 +407,28 @@ onUnmounted(() => {
 
 .chart {
   height: 320px;
+}
+
+.trend-card .trend-content {
+  min-height: 120px;
+  padding: var(--spacing-md);
+  background: var(--color-background-page);
+  border-radius: var(--radius-lg);
+}
+
+.trend-text {
+  font-size: var(--font-size-base);
+  line-height: 1.8;
+  color: var(--text-primary);
+  text-align: justify;
+  margin: 0;
+}
+
+.trend-placeholder {
+  font-size: var(--font-size-base);
+  color: var(--text-tertiary);
+  text-align: center;
+  margin: 0;
+  padding: var(--spacing-lg) 0;
 }
 </style>

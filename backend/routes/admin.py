@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify, g
 from functools import wraps
+from sqlalchemy import or_
 
-from models import db, User, Product, SystemLog, Message
+from models import db, User, Product, SystemLog, Message, Transaction, ProductTag
 from app import token_required
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -60,8 +61,26 @@ def delete_user(user_id):
     if user.role == 'admin':
         return jsonify({'error': 'Cannot delete admin user'}), 400
 
-    # 先删除用户关联的商品标签、商品等
-    # 这里简化处理，直接删除（数据库外键约束可能报错，实际应设计级联删除）
+    # 1. 删除用户发布的所有商品及其关联（标签、交易）
+    for product in Product.query.filter_by(user_id=user_id).all():
+        ProductTag.query.filter_by(product_id=product.id).delete()
+        Transaction.query.filter_by(product_id=product.id).delete()
+        db.session.delete(product)
+
+    # 2. 删除用户作为买家或卖家的交易记录
+    Transaction.query.filter(
+        or_(Transaction.buyer_id == user_id, Transaction.seller_id == user_id)
+    ).delete(synchronize_session=False)
+
+    # 3. 删除用户相关的消息
+    Message.query.filter(
+        or_(Message.from_user == user_id, Message.to_user == user_id)
+    ).delete(synchronize_session=False)
+
+    # 4. 删除系统日志中该用户的记录
+    SystemLog.query.filter_by(user_id=user_id).delete()
+
+    # 5. 删除用户
     db.session.delete(user)
     db.session.commit()
     return jsonify({'message': 'User deleted successfully'})

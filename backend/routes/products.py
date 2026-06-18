@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g, current_app
 from sqlalchemy import or_
 
-from models import db, Product, Tag, ProductTag
+from models import db, Product, Tag, ProductTag, Transaction
 from app import log_action, token_required, allowed_file, save_uploaded_file
 
 bp = Blueprint('products', __name__)
@@ -278,7 +278,8 @@ def delete_product(product_id):
     if product.user_id != g.user.id and g.user.role != 'admin':
         return jsonify({'error': 'You can only delete your own products'}), 403
 
-    # 先删除关联的标签记录，避免外键约束问题
+    # 先删除关联的交易和标签记录，避免外键约束问题
+    Transaction.query.filter_by(product_id=product_id).delete()
     ProductTag.query.filter_by(product_id=product_id).delete()
     db.session.commit()
 

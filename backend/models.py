@@ -173,3 +173,22 @@ class ProductTag(db.Model):
             'is_ai_generated': self.is_ai_generated,
             'create_time': utc_to_local(self.create_time)
         }
+
+
+class TrendAnalysis(db.Model):
+    __tablename__ = 'trend_analysis'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    year_month = db.Column(db.String(7), unique=True, nullable=False)
+    analysis = db.Column(db.Text, nullable=False)
+    source = db.Column(db.String(20), default='ai')
+    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'year_month': self.year_month,
+            'analysis': self.analysis,
+            'source': self.source,
+            'create_time': utc_to_local(self.create_time)
+        }
